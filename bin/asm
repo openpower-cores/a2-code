@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+
+arch="-ma2"
+opts="-mregnames -mrelocatable -be"
+
+as $arch $opts -alhnd $1.s -o $1.out > $1.lst
+

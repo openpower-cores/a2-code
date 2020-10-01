@@ -1,0 +1,10 @@
+#!/usr/bin/bash
+
+if [ -z "$1" ]; then
+   f=a
+else
+   f=$1
+fi
+
+# this removes the addresses; objdump does show all 0's when align skips addresses
+objdump -s -j .hwinit $f.out  | tail -n +5  | cut -c 7-41 > $f.hwinit.dmp
