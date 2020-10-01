@@ -1,2 +1,4 @@
 # a2-code
-A2 Code Samples
+
+This repo contains A2 code samples, scripts for creating memory images, etc.
+
