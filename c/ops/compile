@@ -1,0 +1,5 @@
+#/usr/bin/bash
+
+pgm="ops"
+gcc -std=gnu99 -mno-vsx -nostdlib -I./a2lib -I./printf -o $pgm $pgm.c ./a2lib/a2lib.c ./printf/printf.c --entry main
+

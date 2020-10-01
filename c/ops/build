@@ -1,0 +1,78 @@
+#/usr/bin/bash
+
+pgm="ops"
+dump1="$pgm.dmp"
+dump2="obj.dmp"
+
+kimage=1          # 1=combine kernel and test in image
+smtflags=1        # 1/3/7/F
+freq=00000064     # 64=100MHz 32=50MHz
+
+objdump -f $pgm               # info
+
+# get digits
+objdump -d $pgm > $dump1      # asm
+objdump -s $pgm > $dump2      # for parsing
+
+# create image-test.dmp
+bin/imagedmp -f $dump2
+echo
+
+# prepend boot code if using single mem image
+if [[ $kimage -eq 1 ]]; then
+   cat asm/boot_prune.dmp image-test.dmp > image.dmp
+   fn=kimage
+else
+   cp image-test.dmp image.dmp
+   fn=image
+fi
+
+if [[ $kimage -eq 1 ]]; then
+   main=`grep "<main>" $dump1`
+   entry=`echo $main | cut -f 1 -d " " | cut -c 9-16`
+   echo "Setting test entry points: 00000A94 00000AD4 00000B14 00000B54"
+   echo "Setting to: $entry in image.dmp"
+
+   rep="s/00000A94 ......../00000A94 $entry/"
+   sed -i -s "$rep" image.dmp
+   rep="s/00000AD4 ......../00000AD4 $entry/"
+   sed -i -s "$rep" image.dmp
+   rep="s/00000B14 ......../00000B14 $entry/"
+   sed -i -s "$rep" image.dmp
+   rep="s/00000B54 ......../00000B54 $entry/"
+   sed -i -s "$rep" image.dmp
+
+   echo "Setting SMT in flags: 00000A04"
+   smt=`grep "00000A04 " image.dmp | cut -c 10-16`
+   smt="$smt$smtflags"
+   echo "Setting to: $smt in image.dmp"
+   rep="s/00000A04 ......../00000A04 $smt/"
+   sed -i -s "$rep" image.dmp
+
+   echo "Setting freq: 00000A10"
+   echo "Setting to: $freq in image.dmp"
+   rep="s/00000A10 ......../00000A10 $freq/"
+   sed -i -s "$rep" image.dmp
+
+   #echo "FreeRTOS needs to run privileged..."
+   #uMSR=8002B000
+   #echo "  00000A80 00000AC0 00000B00 00000B40"
+   #echo "Setting to: $uMSR in image.dmp"
+   #
+   #rep="s/00000A80 ......../00000A80 $uMSR/"
+   #sed -i -s "$rep" image.dmp
+   #rep="s/00000AC0 ......../00000AC0 $uMSR/"
+   #sed -i -s "$rep" image.dmp
+   #rep="s/00000B00 ......../00000B00 $uMSR/"
+   #sed -i -s "$rep" image.dmp
+   #rep="s/00000B40 ......../00000B40 $uMSR/"
+   #sed -i -s "$rep" image.dmp
+   echo
+fi
+
+echo "Created memory file image.dmp."
+echo
+
+# create tcl script for fpga
+bin/dmp2tcl -f image.dmp -o "${fn}_${pgm}.tcl"
+
