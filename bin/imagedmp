@@ -1,0 +1,128 @@
+#!/usr/bin/python
+# coding: utf-8
+# © IBM Corp. 2020
+# Licensed under and subject to the terms of the CC-BY 4.0
+# license (https://creativecommons.org/licenses/by/4.0/legalcode). 
+# Additional rights, including the right to physically implement a softcore 
+# that is compliant with the required sections of the Power ISA 
+# Specification, will be available at no cost via the OpenPOWER Foundation. 
+# This README will be updated with additional information when OpenPOWER's 
+# license is available.
+
+# convert objdump to single-line format (addr data)
+# objdump -s abc > obj.dmp
+
+# data can be less than 4B/group
+# addr NOT guaranteed to be 4B-aligned, so need to handle 1B,2B addresses; assuming each line is at least 4B apart for now
+
+inFile = 'obj.dmp'
+outFile = 'image-test.dmp'
+
+keepZeroes = False
+le = True
+
+import argparse
+
+parser = argparse.ArgumentParser(description='Convert objdump to addr/data format.')
+parser.add_argument('-f', action='store', dest='inFile')
+parser.add_argument('-o', action='store', dest='outFile')
+parser.add_argument('-z', action='store', dest='keepZeros')
+parser.add_argument('-l', action='store', dest='le')
+args = parser.parse_args()
+
+if args.inFile is not None:
+  inFile = args.inFile
+
+if args.outFile is not None:
+  outFile = args.outFile
+  
+if args.keepZeros is not None:
+  keepZeros = args.keepZeros != '0'
+
+if args.le is not None:
+  le = args.le != '0'
+
+def b2x(b, w=None):
+  if w is None:
+    rem = len(b) % 4
+    w = len(b)/4
+    if rem != 0:
+      w = w + 1
+  return '{0:0{l}X}'.format(int(b,2), l=w)  
+  
+def x2b(x, w=None):
+  i = int(str(x),16)
+  if w is None:
+    return bin(i)[2:]
+  else:
+    return '{0:0>{l}s}'.format(bin(i)[2:], l=w) 
+    
+def d2x(x, w=None):
+  #return hex(int(x)).split('x')[-1].upper()
+  if w is None:
+    return '{0:X}'.format(x)
+  else:
+    return '{0:0{l}X}'.format(x, l=w)
+
+def x2d(i):
+  return int(i, 16)
+
+dumpData = []    
+start = 0
+with open(inFile, "rb") as f:
+  while True:
+   #data = f.read().replace('\n', ' ').split()
+   line = f.readline()
+   if not line:
+     break
+   line = line[0:45]
+   if line.startswith(' '):
+     tokens = line.split()
+     addr = tokens[0].upper()
+     addrAlign = int(addr, 16) % 4
+     if addrAlign == 1:
+        print 'Found 1B-aligned addr! - skipping'
+        print line
+        print '**********************'
+        continue
+     elif addrAlign == 2:
+        print 'Found 2B-aligned addr! - skipping'
+        print line
+        print '**********************'
+        continue
+     if len(addr) != 8:       # SHOULD be .comment
+        print 'Skipping: ' + line
+        break
+     if start == 0:
+        start = addr
+     for i in range(1,5):
+        if len(tokens) == i:
+           break
+        data = tokens[i].upper()
+        if len(data) < 8:
+           if le:
+              data = ('00000000' + data)[-8:]
+           else: 
+              data = (data + '00000000' + data)[0:8]        
+        dumpData.append([addr,data])
+        addr = d2x(x2d(addr) + 4)  
+   
+print('Read ' + str(len(dumpData)) + ' words from ' + inFile + '.')
+nz = 0
+mem = {}
+
+for i in range(len(dumpData)):
+      addr = dumpData[i][0]
+      data = dumpData[i][1]
+      if data != '00000000' or keepZeroes:
+         mem[addr] = data
+         nz += 1
+print('Loaded ' + str(nz) + ' nonzero words.')   
+
+f = open(outFile, 'w') 
+for a in sorted(mem) : 
+   f.write(a + ' ' + mem[a] + '\n')
+f.close()
+
+print('Wrote ' + outFile + '.')
+

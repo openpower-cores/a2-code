@@ -1,0 +1,114 @@
+#!/usr/bin/python
+# coding: utf-8
+# © IBM Corp. 2020
+# Licensed under and subject to the terms of the CC-BY 4.0
+# license (https://creativecommons.org/licenses/by/4.0/legalcode). 
+# Additional rights, including the right to physically implement a softcore 
+# that is compliant with the required sections of the Power ISA 
+# Specification, will be available at no cost via the OpenPOWER Foundation. 
+# This README will be updated with additional information when OpenPOWER's 
+# license is available.
+#
+# convert dump file (data4 data4 data4 data4 format) to sparse dump (addr data4)
+#
+
+# these are DW!  assuming 00000000 high-order for now
+config = {
+  'boot_config': '00000100',
+  'sections': {
+    'hwinit': {'addr': '00000000'}, 
+  }
+}
+
+inFile = 'boot'
+outFile = 'boot_prune.dmp'
+keepZeros = False
+
+import argparse
+
+parser = argparse.ArgumentParser(description='Convert datax4 format to addr/data format.')
+parser.add_argument('-f', action='store', dest='inFile')
+parser.add_argument('-o', action='store', dest='outFile')
+parser.add_argument('-z', action='store', dest='keepZeros')
+args = parser.parse_args()
+
+if args.inFile is not None:
+  inFile = args.inFile
+  outFile = inFile + '_prune.dmp'
+
+if args.outFile is not None:
+  outFile = args.outFile
+  
+if args.keepZeros is not None:
+  keepZeros = args.keepZeros != '0'
+
+def b2x(b, w=None):
+  if w is None:
+    rem = len(b) % 4
+    w = len(b)/4
+    if rem != 0:
+      w = w + 1
+  return '{0:0{l}X}'.format(int(b,2), l=w)  
+  
+def x2b(x, w=None):
+  i = int(str(x),16)
+  if w is None:
+    return bin(i)[2:]
+  else:
+    return '{0:0>{l}s}'.format(bin(i)[2:], l=w) 
+    
+def d2x(x, w=None):
+  if w is None:
+    return '{0:X}'.format(x)
+  else:
+    return '{0:0{l}X}'.format(x, l=w)
+
+def x2d(i):
+  return int(i, 16)
+    
+def loadSect(s, start):
+
+   if type(start) == int:
+      addr = start
+      start = str(start)
+   else:
+      addr = x2d(start)
+
+   sFile = inFile + '.' + s + '.dmp' 
+   print('Reading section: ' + s + ', address=' + start + '(' + sFile + ')...')
+   with open(sFile, "rb") as f:
+      data = f.read().replace('\n', ' ').split()
+   print('Read ' + str(len(data)) + ' words.')
+   nz = 0
+
+   addrHex = start.zfill(8)
+   print('Start address is ' + addrHex + '.')
+   for i in range(len(data)):
+      if data[i] != '00000000':
+         mem[addrHex] = data[i].upper()
+         nz += 1
+      addr += 4
+      addrHex = d2x(addr, 8)
+   print('Loaded ' + str(nz) + ' nonzero words.')   
+
+
+mem = {}
+
+for s in config['sections']:
+
+   sectDef = config['sections'][s]
+   if type(sectDef) is not list:
+      start = sectDef['addr']        
+      loadSect(s, start)
+   else:
+      for i in range(len(sectDef)):
+         start = sectDef[i]['addr']
+         loadSect(s, start)         
+
+f = open(outFile, 'w') 
+for a in sorted(mem) : 
+   f.write(a + ' ' + mem[a] + '\n')
+f.close()
+
+print('Wrote ' + outFile + '.')
+
